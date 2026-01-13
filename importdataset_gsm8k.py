@@ -27,7 +27,7 @@ def get_max_number(text):
     return max(numbers) if numbers else 0
 
 
-def prepare_offline_multi_math_benchmark(output_file="gsm8k_advanced_math_benchmark.json"):
+def prepare_offline_multi_math_benchmark(output_file="datasets/gsm8k_advanced_math_benchmark.json"):
     print("Downloading GSM8K dataset...")
     # 'train' split provides a larger pool of examples (7.5K).
     dataset = load_dataset("openai/gsm8k", "main", split="train")
