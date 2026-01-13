@@ -1,14 +1,8 @@
 # ImportFromHuggingFace
-
-
-gsm8k_advanced_math_benchmark.json is a dataset of 10 gigantic math problems from the GSM8K dataset. This dataset is used to evaluate the performance of a model on complex math problems.
-
-gaia_dataset.json is a dataset of 10 gigantic math problems from the GSM8K dataset. This dataset is used to evaluate the performance of a model on reasoning tasks.
-
-# LangGraph Agentic Workflow
+This project supports dataset generation and evaluation of LLM models using internal prompts and node definitions to produce node-specific golden answers.
 
 ## Overview
-This project implements a **state-driven, agentic workflow** using LangGraph. The agent follows a structured reasoning loop with built-in self-correction, tool integration, and evaluation hooks to ensure reliability, correctness, and observability.
+Our project implements a **state-driven, agentic workflow** using LangGraph. The agent follows a structured reasoning loop with built-in self-correction, tool integration, and evaluation hooks to ensure reliability, correctness, and observability.
 
 ## Architecture
 
@@ -22,8 +16,34 @@ The agent operates in iterative stages until the goal is achieved:
 5. **Reflect** – Critiques results and decides whether to pivot, retry, or conclude.
 6. **Final** – Generates a user-facing response.
 
+### High-Level Flow
+```mermaid
+graph LR
+    Start --> Plan --> Thought --> Action --> Observe --> Reflect --> Final --> End
+```
+
 ### Recursive Self-Correction
 If an error or suboptimal result is detected during **Observe** or **Reflect**, the graph loops back to **Thought** to revise the strategy rather than terminating early.
+
+### Tool Execution Loop
+```mermaid
+graph LR
+    Start((__start__)) --> Plan[Plan Node]
+    Plan --> Thought[Thought Node]
+    
+    subgraph Tool_Execution_Loop
+    Thought --> Action[Action Node]
+    Action --> PT_Call[Process Tool Call]
+    PT_Call --> Tools{Tools}
+    Tools --> PT_Results[Process Tool Results]
+    PT_Results --> Observe[Observe Node]
+    Observe --> Reflect[Reflect Node]
+    end
+    
+    Reflect -- "Retry / Pivot" --> Thought
+    Reflect -- "Goal Achieved" --> Final[Generate Final Response]
+    Final --> End((__end__))
+```
 
 ## Node Responsibilities
 
@@ -36,12 +56,6 @@ If an error or suboptimal result is detected during **Observe** or **Reflect**, 
 | Reflect | Performance critique and decision making      | Pivot vs. conclude decision       |
 | Final   | Human-readable response generation            | Contextualized final answer       |
 
-## Execution Logic & Safeguards
-- **Loop Prevention**: If the same failure occurs twice, the agent must try an alternative strategy.
-- **Constraint Enforcement**: Tool calls must respect schemas, column definitions, and tool limits.
-- **Ambiguity Handling**: The agent asks clarification questions when goals are unclear.
-- **Security**: Internal prompts, reasoning traces, and tool details are never exposed to users.
-
 ## Evaluation & Observability
 The workflow integrates with Langfuse for node-level evaluation:
 - **Dataset Mapping**: Uses golden answers from dataset metadata for grounded evaluation.
@@ -49,34 +63,12 @@ The workflow integrates with Langfuse for node-level evaluation:
 - **Tone & Quality Checks**: Responses are evaluated for both accuracy and professional tone.
 - **Node Alignment**: Internal node behavior is validated against architectural guidelines.
 
-## Graph Structure
-
-### High-Level Flow
-```mermaid
-graph LR
-    Start --> Plan --> Thought --> Action --> Observe --> Reflect --> Final --> End
-```
-### Tool Execution Loop
-```mermaid
-graph LR
-    Thought → Action → Process Tool Call → Tools → Process Results → Observe → Reflect → (Retry or Conclude)
-```
 ## Execution Logic & Safeguards
 - **Loop Prevention**: If the same failure occurs twice, the agent must try an alternative strategy.
 - **Constraint Enforcement**: Tool calls must respect schemas, column definitions, and tool limits.
 - **Ambiguity Handling**: The agent asks clarification questions when goals are unclear.
 - **Security**: Internal prompts, reasoning traces, and tool details are never exposed to users.
 
-## Evaluation & Observability
-The workflow integrates with Langfuse for node-level evaluation:
-- **Dataset Mapping**: Uses golden answers from dataset metadata for grounded evaluation.
-- **Variable Mapping**: Final outputs are compared only after successful self-correction.
-- **Tone & Quality Checks**: Responses are evaluated for both accuracy and professional tone.
-- **Node Alignment**: Internal node behavior is validated against architectural guidelines.
-
-## Benchmarks
-- Custom-annotated datasets based on GSM8K and GAIA
+## Benchmarks Used as a Baseline
+- Custom-annotated datasets based on GSM8K (School Math Problems) and GAIA (realistic assistant tasks) 
 - Golden traces available for per-node diagnostics and failure analysis
-
-## Summary
-This workflow provides a robust, self-correcting agent architecture with clear cognitive separation, safe tool usage, and production-grade evaluation support.
