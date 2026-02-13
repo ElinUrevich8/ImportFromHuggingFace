@@ -5,7 +5,7 @@ from huggingface_hub import login
 from google import genai  
 
 # Import the prompts from reference file
-from agent_prompts_ref import NODE_PROMPTS
+from references.agent_prompts_ref import NODE_PROMPTS
 
 # Load environment variables from .env file
 import dotenv
