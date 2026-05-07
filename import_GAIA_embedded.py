@@ -1,5 +1,6 @@
+from google.genai._api_client import MAX_RETRY_COUNT
 import json
-import os
+import os, time
 import asyncio
 import mlflow
 import pandas as pd
@@ -7,7 +8,9 @@ from datetime import datetime
 from datasets import load_dataset
 from huggingface_hub import login as hf_login
 from google import genai
+from google.genai import types
 import chromadb
+from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 
 # Import the prompts from reference file
@@ -23,6 +26,8 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OUTPUT_FILE = f'datasets/gaia_node_embedded_benchmark{datetime.now():%Y-%m-%d_%H:%M:%S%z}.json'
 GAIA_LEVELS = ["1", "2", "3"]
 MAX_EXAMPLES_PER_TOOL_PER_LEVEL = 5
+MAX_RETRY_COUNT=3
+MAX_DELAY=120
 
 TOOL_DESCRIPTIONS = {
     "direct_answer": "General reasoning, logic, or questions that can be answered using internal knowledge without external data lookup.",
@@ -43,7 +48,13 @@ hf_login(token=HF_TOKEN)
 client = genai.Client(api_key=GOOGLE_API_KEY)
 
 # Creation of ChromaDB client and collection with the Google Generative AI embedding function
-chromadb_client = chromadb.Client()
+chromadb_client = chromadb.PersistentClient(
+    path="./chromadb",
+    settings=Settings(
+        anonymized_telemetry=False
+    )
+)
+
 chromacollection = chromadb_client.get_or_create_collection(
     name="gaia_node_embedded_benchmark",
     embedding_function=google_ef
@@ -75,28 +86,28 @@ def get_node_expectations(question):
     (e.g., the 'action' must implement a step defined in the 'plan').
     Expected Keys: "plan", "thought", "action", "observe", "reflect".
     """
-
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash", 
-            contents=context_prompt
-        )
+    for try_number in range(MAX_RETRY_COUNT):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash", 
+                contents=context_prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json" 
+                )
+            )
         
-        # IMPROVED EXTRACTION: Find the actual JSON content
-        text = response.text.strip()
-        first_bracket = text.find('{')
-        last_bracket = text.rfind('}')
+            return json.loads(response.text)
         
-        if first_bracket == -1 or last_bracket == -1:
-            print(f"No JSON found in response: {text[:100]}...")
+        except Exception as e:
+            error_string = str(e)
+            if "Rate limit exceeded" in error_string or "429" in error_string:
+                print(f"Attempt {try_number + 1} failed: Rate limit exceeded. Waiting for {MAX_DELAY} seconds...")
+                time.sleep(MAX_DELAY)
+                continue
+            print(f"Attempt {try_number + 1} failed: {error_string}")
             return None
-            
-        clean_json = text[first_bracket:last_bracket + 1]
-        return json.loads(clean_json)
-        
-    except Exception as e:
-        print(f"Error annotating question: {e}")
-        return None
+    print(f"Failed to get node expectations after {MAX_RETRY_COUNT} attempts.")    
+    return None
 
 def prepare_annotated_benchmark():
     print("Fetching GAIA dataset...")
